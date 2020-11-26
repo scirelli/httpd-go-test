@@ -51,17 +51,13 @@ type ConnectionManager struct {
 //AddConnection used to add connections to the connection list.
 func (cm *ConnectionManager) AddConnection(webSocketConnection *Connection) error {
 	for i, conn := range cm.Connections {
-		conn.mux.Lock()
-		if !conn.Active {
-			conn.mux.Unlock()
-
+		if !conn.Active() {
 			cm.mux.Lock()
 			cm.Connections[i] = webSocketConnection
 			cm.mux.Unlock()
 
 			return nil
 		}
-		conn.mux.Unlock()
 	}
 
 	cm.mux.Lock()
@@ -119,8 +115,8 @@ func (cm *ConnectionManager) ServeHTTP(res http.ResponseWriter, req *http.Reques
 
 	var wsc = &Connection{
 		Connection: c,
-		Active:     true,
 	}
+	wsc.SetActive(true)
 
 	go func(wsc *Connection) {
 		for {

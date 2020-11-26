@@ -14,7 +14,7 @@ window.addEventListener('load', ()=> {
 
         if(ws) return false;
 
-        ws = new WebSocket(`ws://${window.location.host}/ws`);
+        ws = new WebSocket(`ws://${window.location.host}/room/1`);
 
         ws.onopen = function() {
             print('OPEN');

@@ -10,17 +10,28 @@ import (
 //Connection represents a web socket connection.
 type Connection struct {
 	Connection *gorwebsocket.Conn
-	Active     bool
+	active     bool
 	mux        sync.Mutex
 }
 
-//SendMessage used to send a message to the listening client.
-func (wsc *Connection) SendMessage(r io.Reader) error {
-	if !wsc.Active {
+//NewConnection create a new Connection
+func NewConnection(conn *gorwebsocket.Conn) *Connection {
+	return &Connection{
+		Connection: conn,
+		active:     true,
+	}
+}
+
+//SendMessage used to send a message to the listening client. Locks so that messages are forced to be syncronis.
+func (conn *Connection) SendMessage(r io.Reader) error {
+	conn.mux.Lock()
+	defer conn.mux.Unlock()
+
+	if !conn.active {
 		return nil
 	}
 
-	w, err := wsc.Connection.NextWriter(gorwebsocket.TextMessage)
+	w, err := conn.Connection.NextWriter(gorwebsocket.TextMessage)
 	if err != nil {
 		return err
 	}
@@ -35,11 +46,28 @@ func (wsc *Connection) SendMessage(r io.Reader) error {
 }
 
 //Close close the gorwebSocket and set this connection to inactive.
-func (wsc *Connection) Close() error {
-	wsc.mux.Lock()
-	wsc.Active = false
-	wsc.Connection.Close()
-	wsc.mux.Unlock()
+func (conn *Connection) Close() error {
+	conn.mux.Lock()
+	defer conn.mux.Unlock()
+
+	conn.active = false
+	conn.Connection.Close()
+	conn.Connection = nil
 
 	return nil
+}
+
+//Active getter, says if the channel is active (true) or not (false).
+func (conn *Connection) Active() bool {
+	conn.mux.Lock()
+	defer conn.mux.Unlock()
+	return conn.active
+}
+
+//SetActive setter, sets the active status.
+func (conn *Connection) SetActive(active bool) *Connection {
+	conn.mux.Lock()
+	defer conn.mux.Unlock()
+	conn.active = active
+	return conn
 }
