@@ -19,6 +19,6 @@ func main() {
 	http.Handle("/room/1", &room1)
 	http.Handle("/", http.FileServer(http.Dir("./web/static")))
 
-	log.Println("Listening on " + *addr)
+	log.Println("Listening on http://" + *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }

@@ -37,7 +37,11 @@ window.addEventListener('load', ()=> {
         if(!ws) return false;
 
         print('SEND: ' + input.value);
-        ws.send(input.value);
+        ws.send(JSON.stringify({
+            content: {
+                text: input.value
+            }
+        }));
         return false;
     };
 

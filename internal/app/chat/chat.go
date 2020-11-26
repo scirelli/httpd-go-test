@@ -2,17 +2,21 @@ package chat
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 
 	gorwebsocket "github.com/gorilla/websocket"
 
 	"github.com/scirelli/httpd-go-test/internal/app/chat/client"
+	"github.com/scirelli/httpd-go-test/internal/app/chat/message"
 	"github.com/scirelli/httpd-go-test/internal/app/chat/user"
 	"github.com/scirelli/httpd-go-test/internal/pkg/websocket"
 )
@@ -22,28 +26,14 @@ type Room struct {
 	Users    []*user.User
 	mux      sync.Mutex
 	Upgrader gorwebsocket.Upgrader
-}
-
-type controlMessage {
-	UserMessage userMessage `json:"message"`
-	Create	createMessage `json:"create"`
-	Error errorMessage `json:"error"`
-	user user.User
-}
-type userMessage struct {
-	Text string `json:"text"`
-}
-type errorMessage struct {
-	Error string `json:"error"`
-}
-type createMessage struct {
-	UserName string `json:"username"`
+	log      *log.Logger
 }
 
 //NewRoom creates a new chat room.
 func NewRoom() Room {
 	return Room{
 		Upgrader: gorwebsocket.Upgrader{},
+		log:      log.New(os.Stderr, "CHAT", log.LstdFlags),
 	}
 }
 
@@ -57,7 +47,7 @@ func SendMessage(msg io.Reader, c client.Client) {
 //SetupNewUser setup a new user in the chat room.
 func (c *Room) SetupNewUser(usr *user.User) {
 	if err := c.AddUser(usr); err != nil {
-		log.Println(err)
+		c.log.Println(err)
 		return
 	}
 
@@ -69,17 +59,33 @@ func (c *Room) listenForMessages(usr *user.User) {
 		_, r, err := usr.Connection().Connection.NextReader()
 		if err != nil {
 			usr.Connection().Close()
-			log.Println("Connection closed.")
+			c.log.Println("Connection closed.")
 			break
 		}
-		c.Relay(r, usr)
+		c.processMessage(r, usr)
+	}
+}
+
+func (c *Room) processMessage(r io.Reader, usr *user.User) {
+	dec := json.NewDecoder(r)
+	for dec.More() {
+		var msg message.Control
+		err := dec.Decode(&msg)
+		if err != nil {
+			c.log.Println(err)
+			break
+		}
+
+		if msg.Content.Text != "" {
+			c.Relay(strings.NewReader(msg.Content.Text), usr)
+		}
 	}
 }
 
 //AddUser used to add users to the user list.
 func (c *Room) AddUser(usr *user.User) error {
 	var conn *websocket.Connection
-	defer log.Println("New user added.")
+	defer c.log.Println("New user added.")
 
 	for i, u := range c.Users {
 		if conn = u.Connection(); !conn.Active() {
@@ -158,7 +164,7 @@ func (c *Room) Relay(r io.Reader, sender *user.User) error {
 func (c *Room) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	conn, err := c.Upgrader.Upgrade(res, req, nil)
 	if err != nil {
-		log.Print("upgrade:", err)
+		c.log.Print("upgrade:", err)
 		return
 	}
 	var user user.User = user.New(websocket.NewConnection(conn), fmt.Sprint(len(c.Users)))
